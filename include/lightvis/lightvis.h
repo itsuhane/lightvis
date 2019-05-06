@@ -7,11 +7,10 @@
 
 namespace lightvis {
 
-int main();
+class LightVisDetail;
 
 class LightVis {
-    class LightVisDetail;
-    friend int main();
+    friend class LightVisDetail;
 
   public:
     LightVis(const std::string &title, int width, int height);
@@ -29,11 +28,14 @@ class LightVis {
   private:
     void draw_gui();
     void make_window_current();
+    void process_events();
     void present();
     void create_window();
     void destroy_window();
     std::unique_ptr<LightVisDetail> detail;
 };
+
+int main();
 
 } // namespace lightvis
 
