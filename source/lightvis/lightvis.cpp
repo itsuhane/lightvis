@@ -125,6 +125,15 @@ class LightVisDetail {
         }
     }
 
+    static void window_refresh_callback(GLFWwindow *win) {
+        auto vis = active_windows().at(win);
+        vis->activate_context();
+        vis->gui();
+        vis->draw(vis->detail->viewport.framebuffer_size.x(), vis->detail->viewport.framebuffer_size.y());
+        vis->render_gui();
+        vis->present();
+    }
+
     static int main() {
         glfwInit();
         glfwSetErrorCallback(error_callback);
@@ -193,6 +202,9 @@ void LightVis::draw(int w, int h) {
 }
 
 void LightVis::gui() {
+    auto nuklear = &detail->context.nuklear;
+    nk_begin(nuklear, "Panel", nk_rect(0, 0, 320, 240), 0);
+    nk_end(nuklear);
 }
 
 void LightVis::activate_context() {
@@ -471,11 +483,14 @@ void LightVis::create_window() {
     glfwSetMouseButtonCallback(detail->context.window, LightVisDetail::mouse_input_callback);
     glfwSetScrollCallback(detail->context.window, LightVisDetail::scroll_input_callback);
     glfwSetCharCallback(detail->context.window, LightVisDetail::character_input_callback);
+
+    glfwSetWindowRefreshCallback(detail->context.window, LightVisDetail::window_refresh_callback);
 }
 
 void LightVis::destroy_window() {
     activate_context();
 
+    glfwSetWindowRefreshCallback(detail->context.window, nullptr);
     glfwSetCharCallback(detail->context.window, nullptr);
     glfwSetScrollCallback(detail->context.window, nullptr);
     glfwSetMouseButtonCallback(detail->context.window, nullptr);
