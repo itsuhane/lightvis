@@ -3,8 +3,14 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules")
 project(lightvis VERSION 0.1.0 LANGUAGES CXX)
 
 include(GNUInstallDirs)
+include(SuperBuildDepends)
 
-add_subdirectory(depends)
+superbuild_option(cpp17)
+superbuild_option(moderncpp)
+superbuild_depend(eigen)
+superbuild_depend(glfw)
+superbuild_depend(glbinding)
+superbuild_depend(nuklear)
 
 add_library(lightvis
   ${CMAKE_CURRENT_SOURCE_DIR}/include/lightvis/lightvis.h
