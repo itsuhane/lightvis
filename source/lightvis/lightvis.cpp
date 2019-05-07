@@ -19,10 +19,12 @@
 
 #define LIGHTVIS_DOUBLE_CLICK_MIN_DT 0.02
 #define LIGHTVIS_DOUBLE_CLICK_MAX_DT 0.2
+#define LIGHTVIS_MAX_VERTEX_BUFFER (512 * 1024)
+#define LIGHTVIS_MAX_ELEMENT_BUFFER (128 * 1024)
 
 namespace lightvis {
 
-struct nk_vertex_t {
+struct vertex_t {
     float position[2];
     float texcoord[2];
     nk_byte color[4];
@@ -97,7 +99,6 @@ class LightVisDetail {
                 double current_button_time = glfwGetTime();
                 double dt = current_button_time - events.last_left_click_time;
                 if (dt > LIGHTVIS_DOUBLE_CLICK_MIN_DT && dt < LIGHTVIS_DOUBLE_CLICK_MAX_DT) {
-                    puts("dbl click");
                     events.double_click = true;
                     events.double_click_position = events.mouse_position;
                     events.last_left_click_time = -std::numeric_limits<double>::max();
@@ -151,21 +152,26 @@ class LightVisDetail {
 
             glfwPollEvents();
 
-            /* handle window events */ {
+            /* close windows */ {
                 std::vector<LightVis *> closing;
                 for (auto [glfw, vis] : active_windows()) {
                     if (glfwWindowShouldClose(glfw)) {
                         closing.emplace_back(vis);
-                    } else {
-                        vis->make_window_current();
-                        vis->process_events();
-                        vis->draw(vis->detail->viewport.window_size.x(), vis->detail->viewport.window_size.y());
-                        vis->draw_gui();
-                        vis->present();
                     }
                 }
                 for (auto vis : closing) {
                     vis->hide();
+                }
+            }
+
+            /* handle window events */ {
+                for (auto [glfw, vis] : active_windows()) {
+                    vis->activate_context();
+                    vis->process_events();
+                    vis->gui();
+                    vis->draw(vis->detail->viewport.framebuffer_size.x(), vis->detail->viewport.framebuffer_size.y());
+                    vis->render_gui();
+                    vis->present();
                 }
             }
         }
@@ -200,19 +206,27 @@ void LightVis::hide() {
 void LightVis::draw(int w, int h) {
 }
 
-void LightVis::draw_gui() {
+void LightVis::gui() {
+    auto ctx = &detail->context.nuklear;
+    nk_colorf bg;
+    bg.r = 0.10f, bg.g = 0.18f, bg.b = 0.24f, bg.a = 1.0f;
+    if (nk_begin(ctx, "Demo", nk_rect(0, 0, 320, 240), 0)) {
+    }
+    nk_end(ctx);
 }
 
-void LightVis::make_window_current() {
+void LightVis::activate_context() {
     glfwMakeContextCurrent(detail->context.window);
-    glbinding::useContext((glbinding::ContextHandle)detail->context.window);
+    glbinding::useCurrentContext();
     glfwGetWindowSize(detail->context.window, &detail->viewport.window_size.x(), &detail->viewport.window_size.y());
     glfwGetFramebufferSize(detail->context.window, &detail->viewport.framebuffer_size.x(), &detail->viewport.framebuffer_size.y());
 }
 
 void LightVis::process_events() {
+    auto window = detail->context.window;
     auto nuklear = &detail->context.nuklear;
     auto &events = detail->events;
+
     nk_input_begin(nuklear);
 
     for (const auto &character : events.characters) {
@@ -220,7 +234,39 @@ void LightVis::process_events() {
     }
     events.characters.clear();
 
-    // TODO: handle key events
+    nk_input_key(nuklear, NK_KEY_DEL, glfwGetKey(window, GLFW_KEY_DELETE) == GLFW_PRESS);
+    nk_input_key(nuklear, NK_KEY_ENTER, glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS);
+    nk_input_key(nuklear, NK_KEY_TAB, glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS);
+    nk_input_key(nuklear, NK_KEY_BACKSPACE, glfwGetKey(window, GLFW_KEY_BACKSPACE) == GLFW_PRESS);
+    nk_input_key(nuklear, NK_KEY_UP, glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS);
+    nk_input_key(nuklear, NK_KEY_DOWN, glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS);
+    nk_input_key(nuklear, NK_KEY_TEXT_START, glfwGetKey(window, GLFW_KEY_HOME) == GLFW_PRESS);
+    nk_input_key(nuklear, NK_KEY_TEXT_END, glfwGetKey(window, GLFW_KEY_END) == GLFW_PRESS);
+    nk_input_key(nuklear, NK_KEY_SCROLL_START, glfwGetKey(window, GLFW_KEY_HOME) == GLFW_PRESS);
+    nk_input_key(nuklear, NK_KEY_SCROLL_END, glfwGetKey(window, GLFW_KEY_END) == GLFW_PRESS);
+    nk_input_key(nuklear, NK_KEY_SCROLL_DOWN, glfwGetKey(window, GLFW_KEY_PAGE_DOWN) == GLFW_PRESS);
+    nk_input_key(nuklear, NK_KEY_SCROLL_UP, glfwGetKey(window, GLFW_KEY_PAGE_UP) == GLFW_PRESS);
+
+    bool shift_down = (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS);
+    bool control_down = (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS);
+    nk_input_key(nuklear, NK_KEY_SHIFT, shift_down);
+    nk_input_key(nuklear, NK_KEY_CTRL, control_down);
+
+    if (control_down) {
+        if (shift_down) {
+            nk_input_key(nuklear, NK_KEY_TEXT_REDO, glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS);
+        } else {
+            nk_input_key(nuklear, NK_KEY_COPY, glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS);
+            nk_input_key(nuklear, NK_KEY_PASTE, glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS);
+            nk_input_key(nuklear, NK_KEY_CUT, glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS);
+            nk_input_key(nuklear, NK_KEY_TEXT_UNDO, glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS);
+            nk_input_key(nuklear, NK_KEY_TEXT_WORD_LEFT, glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS);
+            nk_input_key(nuklear, NK_KEY_TEXT_WORD_RIGHT, glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS);
+        }
+    } else {
+        nk_input_key(nuklear, NK_KEY_LEFT, glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS);
+        nk_input_key(nuklear, NK_KEY_RIGHT, glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS);
+    }
 
     int x = (int)events.mouse_position.x();
     int y = (int)events.mouse_position.y();
@@ -234,6 +280,98 @@ void LightVis::process_events() {
 
     nk_input_scroll(nuklear, nk_vec2(events.scroll_offset.x(), events.scroll_offset.y()));
     events.scroll_offset.setZero();
+
+    nk_input_end(nuklear);
+}
+
+void LightVis::render_gui() {
+    auto &context = detail->context;
+    auto &viewport = detail->viewport;
+
+    gl::GLfloat ortho[4][4] = {
+        {2.0f, 0.0f, 0.0f, 0.0f},
+        {0.0f, -2.0f, 0.0f, 0.0f},
+        {0.0f, 0.0f, -1.0f, 0.0f},
+        {-1.0f, 1.0f, 0.0f, 1.0f}};
+    ortho[0][0] /= (gl::GLfloat)detail->viewport.window_size.x();
+    ortho[1][1] /= (gl::GLfloat)detail->viewport.window_size.y();
+
+    gl::glDisable(gl::GL_CULL_FACE);
+    gl::glDisable(gl::GL_DEPTH_TEST);
+
+    gl::glEnable(gl::GL_BLEND);
+    gl::glEnable(gl::GL_SCISSOR_TEST);
+
+    gl::glBlendEquation(gl::GL_FUNC_ADD);
+    gl::glBlendFunc(gl::GL_SRC_ALPHA, gl::GL_ONE_MINUS_SRC_ALPHA);
+
+    gl::glUseProgram(context.program);
+
+    gl::glUniform1i(context.uniform_texture, 0);
+    gl::glUniformMatrix4fv(context.uniform_projmat, 1, gl::GL_FALSE, &ortho[0][0]);
+    gl::glViewport(0, 0, viewport.framebuffer_size.x(), viewport.framebuffer_size.y());
+
+    gl::glBindVertexArray(context.vao);
+    gl::glBindBuffer(gl::GL_ARRAY_BUFFER, context.vbo);
+    gl::glBindBuffer(gl::GL_ELEMENT_ARRAY_BUFFER, context.ebo);
+
+    nk_convert_config config;
+    memset(&config, 0, sizeof(nk_convert_config));
+
+    static const nk_draw_vertex_layout_element vertex_layout[] = {
+        {NK_VERTEX_POSITION, NK_FORMAT_FLOAT, offsetof(vertex_t, position)},
+        {NK_VERTEX_TEXCOORD, NK_FORMAT_FLOAT, offsetof(vertex_t, texcoord)},
+        {NK_VERTEX_COLOR, NK_FORMAT_R8G8B8A8, offsetof(vertex_t, color)},
+        {NK_VERTEX_LAYOUT_END}};
+
+    config.vertex_layout = vertex_layout;
+    config.vertex_size = sizeof(vertex_t);
+    config.vertex_alignment = NK_ALIGNOF(vertex_t);
+    config.null = context.null_texture;
+    config.circle_segment_count = 22;
+    config.curve_segment_count = 22;
+    config.arc_segment_count = 22;
+    config.global_alpha = 1.0f;
+    config.shape_AA = NK_ANTI_ALIASING_ON;
+    config.line_AA = NK_ANTI_ALIASING_ON;
+
+    gl::glBufferData(gl::GL_ARRAY_BUFFER, LIGHTVIS_MAX_VERTEX_BUFFER, nullptr, gl::GL_STREAM_DRAW);
+    gl::glBufferData(gl::GL_ELEMENT_ARRAY_BUFFER, LIGHTVIS_MAX_ELEMENT_BUFFER, nullptr, gl::GL_STREAM_DRAW);
+
+    void *vertices = gl::glMapBuffer(gl::GL_ARRAY_BUFFER, gl::GL_WRITE_ONLY);
+    void *elements = gl::glMapBuffer(gl::GL_ELEMENT_ARRAY_BUFFER, gl::GL_WRITE_ONLY);
+
+    nk_buffer vbuffer, ebuffer;
+    nk_buffer_init_fixed(&vbuffer, vertices, (size_t)LIGHTVIS_MAX_VERTEX_BUFFER);
+    nk_buffer_init_fixed(&ebuffer, elements, (size_t)LIGHTVIS_MAX_ELEMENT_BUFFER);
+    nk_convert(&context.nuklear, &context.commands, &vbuffer, &ebuffer, &config);
+
+    gl::glUnmapBuffer(gl::GL_ARRAY_BUFFER);
+    gl::glUnmapBuffer(gl::GL_ELEMENT_ARRAY_BUFFER);
+
+    Eigen::Vector2f framebuffer_scale = viewport.framebuffer_size.cast<float>().array() / viewport.window_size.cast<float>().array();
+    const nk_draw_command *command;
+    const nk_draw_index *offset = nullptr;
+    nk_draw_foreach(command, &context.nuklear, &context.commands) {
+        if (command->elem_count == 0) continue;
+        gl::glBindTexture(gl::GL_TEXTURE_2D, (gl::GLuint)command->texture.id);
+        gl::glScissor(
+            (gl::GLint)(command->clip_rect.x * framebuffer_scale.x()),
+            (gl::GLint)(viewport.window_size.y() - (command->clip_rect.y + command->clip_rect.h) * framebuffer_scale.y()),
+            (gl::GLint)(command->clip_rect.w * framebuffer_scale.x()),
+            (gl::GLint)(command->clip_rect.h * framebuffer_scale.y()));
+        gl::glDrawElements(gl::GL_TRIANGLES, (gl::GLsizei)command->elem_count, gl::GL_UNSIGNED_SHORT, offset);
+        offset += command->elem_count;
+    }
+    nk_clear(&context.nuklear);
+
+    gl::glBindBuffer(gl::GL_ELEMENT_ARRAY_BUFFER, 0);
+    gl::glBindBuffer(gl::GL_ARRAY_BUFFER, 0);
+    gl::glBindVertexArray(0);
+
+    gl::glUseProgram(0);
+    gl::glDisable(gl::GL_SCISSOR_TEST);
+    gl::glDisable(gl::GL_BLEND);
 }
 
 void LightVis::present() {
@@ -252,9 +390,9 @@ void LightVis::create_window() {
 
     active_windows()[detail->context.window] = this;
     glfwMakeContextCurrent(detail->context.window);
+    glbinding::initialize(glfwGetProcAddress, false);
     glfwGetFramebufferSize(detail->context.window, &detail->viewport.framebuffer_size.x(), &detail->viewport.framebuffer_size.y());
     glfwSwapInterval(1);
-    glbinding::Binding::initialize((glbinding::ContextHandle)detail->context.window, glfwGetProcAddress, true, false);
 
     nk_init_default(&detail->context.nuklear, 0);
     detail->context.nuklear.clip.copy = LightVisDetail::clipboard_copy_callback;
@@ -325,9 +463,9 @@ void LightVis::create_window() {
     gl::glEnableVertexAttribArray((gl::GLuint)detail->context.attribute_texcoord);
     gl::glEnableVertexAttribArray((gl::GLuint)detail->context.attribute_color);
 
-    gl::glVertexAttribPointer((gl::GLuint)detail->context.attribute_position, 2, gl::GL_FLOAT, gl::GL_FALSE, sizeof(nk_vertex_t), (void *)offsetof(nk_vertex_t, position));
-    gl::glVertexAttribPointer((gl::GLuint)detail->context.attribute_texcoord, 2, gl::GL_FLOAT, gl::GL_FALSE, sizeof(nk_vertex_t), (void *)offsetof(nk_vertex_t, texcoord));
-    gl::glVertexAttribPointer((gl::GLuint)detail->context.attribute_color, 4, gl::GL_UNSIGNED_BYTE, gl::GL_TRUE, sizeof(nk_vertex_t), (void *)offsetof(nk_vertex_t, color));
+    gl::glVertexAttribPointer((gl::GLuint)detail->context.attribute_position, 2, gl::GL_FLOAT, gl::GL_FALSE, sizeof(vertex_t), (void *)offsetof(vertex_t, position));
+    gl::glVertexAttribPointer((gl::GLuint)detail->context.attribute_texcoord, 2, gl::GL_FLOAT, gl::GL_FALSE, sizeof(vertex_t), (void *)offsetof(vertex_t, texcoord));
+    gl::glVertexAttribPointer((gl::GLuint)detail->context.attribute_color, 4, gl::GL_UNSIGNED_BYTE, gl::GL_TRUE, sizeof(vertex_t), (void *)offsetof(vertex_t, color));
 
     gl::glBindTexture(gl::GL_TEXTURE_2D, 0);
     gl::glBindBuffer(gl::GL_ARRAY_BUFFER, 0);
@@ -356,6 +494,8 @@ void LightVis::create_window() {
 }
 
 void LightVis::destroy_window() {
+    activate_context();
+
     glfwSetCharCallback(detail->context.window, nullptr);
     glfwSetScrollCallback(detail->context.window, nullptr);
     glfwSetMouseButtonCallback(detail->context.window, nullptr);

@@ -24,11 +24,12 @@ class LightVis {
 
   protected:
     virtual void draw(int w, int h);
+    virtual void gui();
 
   private:
-    void draw_gui();
-    void make_window_current();
+    void activate_context();
     void process_events();
+    void render_gui();
     void present();
     void create_window();
     void destroy_window();
