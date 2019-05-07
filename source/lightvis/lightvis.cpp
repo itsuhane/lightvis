@@ -58,10 +58,6 @@ struct viewport_t {
 struct events_t {
     std::vector<unsigned int> characters;
     Eigen::Vector2f scroll_offset;
-    Eigen::Vector2i mouse_position;
-    bool left_click = false;
-    bool middle_click = false;
-    bool right_click = false;
     bool double_click = false;
     Eigen::Vector2i double_click_position;
     double last_left_click_time = -std::numeric_limits<double>::max();
@@ -90,30 +86,20 @@ class LightVisDetail {
 
     static void mouse_input_callback(GLFWwindow *win, int button, int action, int mods) {
         auto &events = active_windows().at(win)->detail->events;
-        double x, y;
-        glfwGetCursorPos(win, &x, &y);
-        events.mouse_position = Eigen::Vector2i((int)x, (int)y);
         if (button == GLFW_MOUSE_BUTTON_LEFT) {
-            events.left_click = (action == GLFW_PRESS);
             if (action == GLFW_PRESS) {
                 double current_button_time = glfwGetTime();
                 double dt = current_button_time - events.last_left_click_time;
                 if (dt > LIGHTVIS_DOUBLE_CLICK_MIN_DT && dt < LIGHTVIS_DOUBLE_CLICK_MAX_DT) {
+                    double x, y;
+                    glfwGetCursorPos(win, &x, &y);
                     events.double_click = true;
-                    events.double_click_position = events.mouse_position;
+                    events.double_click_position = Eigen::Vector2d(x, y).cast<int>();
                     events.last_left_click_time = -std::numeric_limits<double>::max();
                 } else {
                     events.last_left_click_time = current_button_time;
                 }
             }
-        } else if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
-            events.middle_click = (action == GLFW_PRESS);
-            events.double_click = false;
-            events.last_left_click_time = -std::numeric_limits<double>::max();
-        } else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
-            events.right_click = (action == GLFW_PRESS);
-            events.double_click = false;
-            events.last_left_click_time = -std::numeric_limits<double>::max();
         }
     }
 
@@ -207,12 +193,6 @@ void LightVis::draw(int w, int h) {
 }
 
 void LightVis::gui() {
-    auto ctx = &detail->context.nuklear;
-    nk_colorf bg;
-    bg.r = 0.10f, bg.g = 0.18f, bg.b = 0.24f, bg.a = 1.0f;
-    if (nk_begin(ctx, "Demo", nk_rect(0, 0, 320, 240), 0)) {
-    }
-    nk_end(ctx);
 }
 
 void LightVis::activate_context() {
@@ -268,12 +248,12 @@ void LightVis::process_events() {
         nk_input_key(nuklear, NK_KEY_RIGHT, glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS);
     }
 
-    int x = (int)events.mouse_position.x();
-    int y = (int)events.mouse_position.y();
-    nk_input_motion(nuklear, x, y);
-    nk_input_button(nuklear, NK_BUTTON_LEFT, x, y, events.left_click);
-    nk_input_button(nuklear, NK_BUTTON_MIDDLE, x, y, events.middle_click);
-    nk_input_button(nuklear, NK_BUTTON_RIGHT, x, y, events.right_click);
+    double x, y;
+    glfwGetCursorPos(window, &x, &y);
+    nk_input_motion(nuklear, (int)x, (int)y);
+    nk_input_button(nuklear, NK_BUTTON_LEFT, (int)x, (int)y, (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS));
+    nk_input_button(nuklear, NK_BUTTON_MIDDLE, (int)x, (int)y, (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS));
+    nk_input_button(nuklear, NK_BUTTON_RIGHT, (int)x, (int)y, (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS));
 
     nk_input_button(nuklear, NK_BUTTON_DOUBLE, events.double_click_position.x(), events.double_click_position.y(), events.double_click);
     events.double_click = false;
