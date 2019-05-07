@@ -29,6 +29,7 @@ class LightVis {
   private:
     void activate_context();
     void process_events();
+    void render_canvas();
     void render_gui();
     void present();
     void create_window();

@@ -129,7 +129,7 @@ class LightVisDetail {
         auto vis = active_windows().at(win);
         vis->activate_context();
         vis->gui();
-        vis->draw(vis->detail->viewport.framebuffer_size.x(), vis->detail->viewport.framebuffer_size.y());
+        vis->render_canvas();
         vis->render_gui();
         vis->present();
     }
@@ -164,7 +164,7 @@ class LightVisDetail {
                     vis->activate_context();
                     vis->process_events();
                     vis->gui();
-                    vis->draw(vis->detail->viewport.framebuffer_size.x(), vis->detail->viewport.framebuffer_size.y());
+                    vis->render_canvas();
                     vis->render_gui();
                     vis->present();
                 }
@@ -274,6 +274,10 @@ void LightVis::process_events() {
     events.scroll_offset.setZero();
 
     nk_input_end(nuklear);
+}
+
+void LightVis::render_canvas() {
+    draw(detail->viewport.framebuffer_size.x(), detail->viewport.framebuffer_size.y());
 }
 
 void LightVis::render_gui() {
