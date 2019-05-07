@@ -6,7 +6,7 @@ include(GNUInstallDirs)
 include(SuperBuildDepends)
 
 superbuild_option(cpp17)
-superbuild_option(moderncpp)
+superbuild_option(modern-cpp)
 superbuild_depend(eigen)
 superbuild_depend(glfw)
 superbuild_depend(glbinding)
