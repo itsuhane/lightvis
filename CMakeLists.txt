@@ -32,5 +32,3 @@ target_link_libraries(lightvis
     depends::glbinding
     depends::nuklear
 )
-
-export(TARGETS lightvis NAMESPACE lightvis:: FILE lightvisConfig.cmake)
