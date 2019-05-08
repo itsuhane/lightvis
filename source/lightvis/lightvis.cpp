@@ -19,8 +19,6 @@
 
 #define LIGHTVIS_DOUBLE_CLICK_MIN_DT 0.02
 #define LIGHTVIS_DOUBLE_CLICK_MAX_DT 0.2
-#define LIGHTVIS_MAX_VERTEX_BUFFER (2 * 1024 * 1024)
-#define LIGHTVIS_MAX_ELEMENT_BUFFER (1024 * 1024)
 
 namespace lightvis {
 
@@ -334,19 +332,26 @@ void LightVis::render_gui() {
     config.shape_AA = NK_ANTI_ALIASING_ON;
     config.line_AA = NK_ANTI_ALIASING_ON;
 
-    gl::glBufferData(gl::GL_ARRAY_BUFFER, LIGHTVIS_MAX_VERTEX_BUFFER, nullptr, gl::GL_STREAM_DRAW);
-    gl::glBufferData(gl::GL_ELEMENT_ARRAY_BUFFER, LIGHTVIS_MAX_ELEMENT_BUFFER, nullptr, gl::GL_STREAM_DRAW);
+    nk_buffer vbuffer, ebuffer;
+    nk_buffer_init_default(&vbuffer); //, vertices, (size_t)LIGHTVIS_MAX_VERTEX_BUFFER);
+    nk_buffer_init_default(&ebuffer); //, elements, (size_t)LIGHTVIS_MAX_ELEMENT_BUFFER);
+    nk_convert(&context.nuklear, &context.commands, &vbuffer, &ebuffer, &config);
+
+    gl::glBufferData(gl::GL_ARRAY_BUFFER, nk_buffer_total(&vbuffer), nullptr, gl::GL_STREAM_DRAW);
+    gl::glBufferData(gl::GL_ELEMENT_ARRAY_BUFFER, nk_buffer_total(&ebuffer), nullptr, gl::GL_STREAM_DRAW);
 
     void *vertices = gl::glMapBuffer(gl::GL_ARRAY_BUFFER, gl::GL_WRITE_ONLY);
     void *elements = gl::glMapBuffer(gl::GL_ELEMENT_ARRAY_BUFFER, gl::GL_WRITE_ONLY);
 
-    nk_buffer vbuffer, ebuffer;
-    nk_buffer_init_fixed(&vbuffer, vertices, (size_t)LIGHTVIS_MAX_VERTEX_BUFFER);
-    nk_buffer_init_fixed(&ebuffer, elements, (size_t)LIGHTVIS_MAX_ELEMENT_BUFFER);
-    nk_convert(&context.nuklear, &context.commands, &vbuffer, &ebuffer, &config);
+    memcpy(vertices, nk_buffer_memory(&vbuffer), nk_buffer_total(&vbuffer));
+    memcpy(elements, nk_buffer_memory(&ebuffer), nk_buffer_total(&ebuffer));
+    printf("vbuffer: %lu\n", nk_buffer_total(&vbuffer));
 
     gl::glUnmapBuffer(gl::GL_ARRAY_BUFFER);
     gl::glUnmapBuffer(gl::GL_ELEMENT_ARRAY_BUFFER);
+
+    nk_buffer_free(&ebuffer);
+    nk_buffer_free(&vbuffer);
 
     Eigen::Vector2f framebuffer_scale = viewport.framebuffer_size.cast<float>().array() / viewport.window_size.cast<float>().array();
     const nk_draw_command *command;
