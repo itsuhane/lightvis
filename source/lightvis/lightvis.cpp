@@ -19,8 +19,8 @@
 
 #define LIGHTVIS_DOUBLE_CLICK_MIN_DT 0.02
 #define LIGHTVIS_DOUBLE_CLICK_MAX_DT 0.2
-#define LIGHTVIS_MAX_VERTEX_BUFFER (512 * 1024)
-#define LIGHTVIS_MAX_ELEMENT_BUFFER (128 * 1024)
+#define LIGHTVIS_MAX_VERTEX_BUFFER (2 * 1024 * 1024)
+#define LIGHTVIS_MAX_ELEMENT_BUFFER (1024 * 1024)
 
 namespace lightvis {
 
@@ -128,7 +128,7 @@ class LightVisDetail {
     static void window_refresh_callback(GLFWwindow *win) {
         auto vis = active_windows().at(win);
         vis->activate_context();
-        vis->gui();
+        vis->gui(&vis->detail->context.nuklear, vis->detail->viewport.window_size.x(), vis->detail->viewport.window_size.y());
         vis->render_canvas();
         vis->render_gui();
         vis->present();
@@ -163,7 +163,7 @@ class LightVisDetail {
                 for (auto [glfw, vis] : active_windows()) {
                     vis->activate_context();
                     vis->process_events();
-                    vis->gui();
+                    vis->gui(&vis->detail->context.nuklear, vis->detail->viewport.window_size.x(), vis->detail->viewport.window_size.y());
                     vis->render_canvas();
                     vis->render_gui();
                     vis->present();
@@ -198,13 +198,16 @@ void LightVis::hide() {
     }
 }
 
+void LightVis::load() {
+}
+
+void LightVis::unload() {
+}
+
 void LightVis::draw(int w, int h) {
 }
 
-void LightVis::gui() {
-    auto nuklear = &detail->context.nuklear;
-    nk_begin(nuklear, "Panel", nk_rect(0, 0, 320, 240), 0);
-    nk_end(nuklear);
+void LightVis::gui(void *ctx, int w, int h) {
 }
 
 void LightVis::activate_context() {
@@ -353,7 +356,7 @@ void LightVis::render_gui() {
         gl::glBindTexture(gl::GL_TEXTURE_2D, (gl::GLuint)command->texture.id);
         gl::glScissor(
             (gl::GLint)(command->clip_rect.x * framebuffer_scale.x()),
-            (gl::GLint)(viewport.window_size.y() - (command->clip_rect.y + command->clip_rect.h) * framebuffer_scale.y()),
+            (gl::GLint)((viewport.window_size.y() - (command->clip_rect.y + command->clip_rect.h)) * framebuffer_scale.y()),
             (gl::GLint)(command->clip_rect.w * framebuffer_scale.x()),
             (gl::GLint)(command->clip_rect.h * framebuffer_scale.y()));
         gl::glDrawElements(gl::GL_TRIANGLES, (gl::GLsizei)command->elem_count, gl::GL_UNSIGNED_SHORT, offset);
@@ -375,8 +378,8 @@ void LightVis::present() {
 }
 
 void LightVis::create_window() {
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 #ifdef __APPLE__
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, (int)gl::GL_TRUE);
@@ -489,10 +492,14 @@ void LightVis::create_window() {
     glfwSetCharCallback(detail->context.window, LightVisDetail::character_input_callback);
 
     glfwSetWindowRefreshCallback(detail->context.window, LightVisDetail::window_refresh_callback);
+
+    load();
 }
 
 void LightVis::destroy_window() {
     activate_context();
+
+    unload();
 
     glfwSetWindowRefreshCallback(detail->context.window, nullptr);
     glfwSetCharCallback(detail->context.window, nullptr);

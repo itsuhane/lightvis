@@ -26,7 +26,7 @@ target_include_directories(lightvis
 )
 
 target_link_libraries(lightvis
-  PUBLIC
+  PRIVATE
     depends::eigen
     depends::glfw
     depends::glbinding

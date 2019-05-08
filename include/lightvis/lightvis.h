@@ -23,8 +23,10 @@ class LightVis {
     void add_repeat(const std::string &panel, const std::string &name, const std::function<bool()> &callback);
 
   protected:
+    virtual void load();
+    virtual void unload();
     virtual void draw(int w, int h);
-    virtual void gui();
+    virtual void gui(void *ctx, int w, int h);
 
   private:
     void activate_context();
