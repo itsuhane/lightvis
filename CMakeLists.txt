@@ -15,6 +15,8 @@ superbuild_depend(nuklear)
 add_library(lightvis
   ${CMAKE_CURRENT_SOURCE_DIR}/include/lightvis/lightvis.h
   ${CMAKE_CURRENT_SOURCE_DIR}/source/lightvis/lightvis.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/source/lightvis/lightvis_font_roboto.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/source/lightvis/lightvis_font_roboto.cpp
 )
 
 target_include_directories(lightvis

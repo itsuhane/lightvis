@@ -17,6 +17,8 @@
 #define NK_IMPLEMENTATION
 #include <nuklear.h>
 
+#include <lightvis/lightvis_font_roboto.h>
+
 #define LIGHTVIS_DOUBLE_CLICK_MIN_DT 0.02
 #define LIGHTVIS_DOUBLE_CLICK_MAX_DT 0.2
 
@@ -479,17 +481,15 @@ void LightVis::create_window() {
     int font_image_width, font_image_height;
     nk_font_atlas_init_default(&detail->context.font_atlas);
     nk_font_atlas_begin(&detail->context.font_atlas);
+    nk_font *roboto = nk_font_atlas_add_from_memory(&detail->context.font_atlas, Roboto_Regular_ttf, Roboto_Regular_ttf_len, 16, nullptr);
     font_image = nk_font_atlas_bake(&detail->context.font_atlas, &font_image_width, &font_image_height, NK_FONT_ATLAS_RGBA32);
     gl::glGenTextures(1, &detail->context.font_texture);
     gl::glBindTexture(gl::GL_TEXTURE_2D, detail->context.font_texture);
     gl::glTexParameteri(gl::GL_TEXTURE_2D, gl::GL_TEXTURE_MIN_FILTER, gl::GL_LINEAR);
     gl::glTexParameteri(gl::GL_TEXTURE_2D, gl::GL_TEXTURE_MAG_FILTER, gl::GL_LINEAR);
     gl::glTexImage2D(gl::GL_TEXTURE_2D, 0, gl::GL_RGBA, (gl::GLsizei)font_image_width, (gl::GLsizei)font_image_height, 0, gl::GL_RGBA, gl::GL_UNSIGNED_BYTE, font_image);
-
     nk_font_atlas_end(&detail->context.font_atlas, nk_handle_id((int)detail->context.font_texture), &detail->context.null_texture);
-    if (detail->context.font_atlas.default_font) {
-        nk_style_set_font(&detail->context.nuklear, &detail->context.font_atlas.default_font->handle);
-    }
+    nk_style_set_font(&detail->context.nuklear, &roboto->handle);
 
     glfwSetMouseButtonCallback(detail->context.window, LightVisDetail::mouse_input_callback);
     glfwSetScrollCallback(detail->context.window, LightVisDetail::scroll_input_callback);
