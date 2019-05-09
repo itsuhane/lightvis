@@ -433,7 +433,6 @@ void LightVis::create_window() {
         }
     )";
 
-    gl::GLint status;
     detail->context.vshader = gl::glCreateShader(gl::GL_VERTEX_SHADER);
     detail->context.fshader = gl::glCreateShader(gl::GL_FRAGMENT_SHADER);
     gl::glShaderSource(detail->context.vshader, 1, &vshader, 0);
@@ -441,14 +440,10 @@ void LightVis::create_window() {
     gl::glCompileShader(detail->context.vshader);
     gl::glCompileShader(detail->context.fshader);
 
-    gl::glGetShaderiv(detail->context.vshader, gl::GL_COMPILE_STATUS, &status);
-    gl::glGetShaderiv(detail->context.fshader, gl::GL_COMPILE_STATUS, &status);
-
     detail->context.program = gl::glCreateProgram();
     gl::glAttachShader(detail->context.program, detail->context.vshader);
     gl::glAttachShader(detail->context.program, detail->context.fshader);
     gl::glLinkProgram(detail->context.program);
-    gl::glGetProgramiv(detail->context.program, gl::GL_LINK_STATUS, &status);
 
     detail->context.uniform_texture = gl::glGetUniformLocation(detail->context.program, "Texture");
     detail->context.uniform_projmat = gl::glGetUniformLocation(detail->context.program, "ProjMat");
