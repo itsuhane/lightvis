@@ -333,8 +333,8 @@ void LightVis::render_gui() {
     config.line_AA = NK_ANTI_ALIASING_ON;
 
     nk_buffer vbuffer, ebuffer;
-    nk_buffer_init_default(&vbuffer); //, vertices, (size_t)LIGHTVIS_MAX_VERTEX_BUFFER);
-    nk_buffer_init_default(&ebuffer); //, elements, (size_t)LIGHTVIS_MAX_ELEMENT_BUFFER);
+    nk_buffer_init_default(&vbuffer);
+    nk_buffer_init_default(&ebuffer);
     nk_convert(&context.nuklear, &context.commands, &vbuffer, &ebuffer, &config);
 
     gl::glBufferData(gl::GL_ARRAY_BUFFER, nk_buffer_total(&vbuffer), nullptr, gl::GL_STREAM_DRAW);
@@ -345,7 +345,6 @@ void LightVis::render_gui() {
 
     memcpy(vertices, nk_buffer_memory(&vbuffer), nk_buffer_total(&vbuffer));
     memcpy(elements, nk_buffer_memory(&ebuffer), nk_buffer_total(&ebuffer));
-    printf("vbuffer: %lu\n", nk_buffer_total(&vbuffer));
 
     gl::glUnmapBuffer(gl::GL_ARRAY_BUFFER);
     gl::glUnmapBuffer(gl::GL_ELEMENT_ARRAY_BUFFER);
