@@ -146,13 +146,28 @@ class Shader {
         gl::glUseProgram(0);
     }
 
+    void set_uniform(const std::string &name, const float &value) {
+        gl::GLint uni = uniform(name);
+        gl::glUniform1f(uni, value);
+    }
+
+    void set_uniform(const std::string &name, const Eigen::Vector3f &vector) {
+        gl::GLint uni = uniform(name);
+        gl::glUniform3fv(uni, 1, vector.data());
+    }
+
+    void set_uniform(const std::string &name, const Eigen::Vector4f &vector) {
+        gl::GLint uni = uniform(name);
+        gl::glUniform4fv(uni, 1, vector.data());
+    }
+
     void set_uniform(const std::string &name, const Eigen::Matrix4f &matrix) {
         gl::GLint uni = uniform(name);
         gl::glUniformMatrix4fv(uni, 1, gl::GL_FALSE, matrix.data());
     }
 
     template <typename E, int N>
-    void set_attribute(const std::string &name, std::vector<Eigen::Matrix<E, N, 1>> &data) {
+    void set_attribute(const std::string &name, const std::vector<Eigen::Matrix<E, N, 1>> &data) {
         gl::GLint attrib = attribute(name);
         if (attribute_buffers.count(attrib) == 0) {
             gl::GLuint buffer;
@@ -170,7 +185,6 @@ class Shader {
     void set_indices(const std::vector<unsigned int> &indices) {
         gl::glBindBuffer(gl::GL_ELEMENT_ARRAY_BUFFER, index_buffer);
         gl::glBufferData(gl::GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int) * indices.size(), &indices[0], gl::GL_DYNAMIC_DRAW);
-        gl::glBindBuffer(gl::GL_ELEMENT_ARRAY_BUFFER, 0);
     }
 
     void draw(gl::GLenum mode, gl::GLuint start, gl::GLuint count) {

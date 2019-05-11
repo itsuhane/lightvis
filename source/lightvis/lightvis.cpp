@@ -17,6 +17,7 @@
 #define NK_IMPLEMENTATION
 #include <nuklear.h>
 
+#include <lightvis/shader.h>
 #include <lightvis/lightvis_font_roboto.h>
 
 #define LIGHTVIS_DOUBLE_CLICK_MIN_DT 0.02
@@ -53,8 +54,9 @@ struct context_t {
 struct viewport_t {
     Eigen::Vector2i window_size;
     Eigen::Vector2i framebuffer_size;
-    Eigen::Vector3f ryp = {0, -45, -42};
-    Eigen::Vector3f xyz = {-8, -8, 8};
+    Eigen::Vector3f camera_ryp = {0, -45, -42};
+    Eigen::Vector3f camera_xyz = {-8, -8, 8};
+    Eigen::Vector3f world_xyz = {0, 0, 0};
     float scale = 1.0;
 };
 
@@ -64,6 +66,13 @@ struct events_t {
     bool double_click = false;
     Eigen::Vector2i double_click_position;
     double last_left_click_time = -std::numeric_limits<double>::max();
+};
+
+struct position_record_t {
+    bool is_trajectory;
+    const std::vector<Eigen::Vector3f> *data;
+    bool uniform_color;
+    const Eigen::Vector4f *color;
 };
 
 std::set<LightVis *> &awaiting_windows() {
@@ -82,6 +91,219 @@ class LightVisDetail {
     context_t context;
     viewport_t viewport;
     events_t events;
+    std::vector<position_record_t> position_records;
+
+    std::unique_ptr<Shader> grid_shader;
+    std::unique_ptr<Shader> position_shader;
+
+    Eigen::Matrix4f projection_matrix(float f = 1.0, float near = 1.0e-2, float far = 1.0e4) const {
+        Eigen::Matrix4f proj = Eigen::Matrix4f::Zero();
+        proj(0, 0) = 2 * (f * viewport.framebuffer_size.y()) / viewport.framebuffer_size.x();
+        proj(1, 1) = -2 * f;
+        proj(2, 2) = (far + near) / (far - near);
+        proj(2, 3) = 2 * far * near / (near - far);
+        proj(3, 2) = 1.0;
+        return proj;
+    }
+
+    Eigen::Matrix4f view_matrix() const {
+        Eigen::Matrix4f view = Eigen::Matrix4f::Zero();
+        view(0, 0) = 1.0;
+        view(2, 1) = 1.0;
+        view(1, 2) = -1.0;
+        view(3, 3) = 1.0;
+        return view;
+    }
+
+    Eigen::Matrix4f model_matrix() const {
+        const Eigen::Vector3f &viewport_ryp = viewport.camera_ryp;
+        const Eigen::Vector3f &viewport_xyz = viewport.camera_xyz;
+
+        Eigen::Matrix3f R = Eigen::Matrix3f::Identity();
+        R = Eigen::AngleAxisf(viewport_ryp[0] * M_PI / 180.0f, Eigen::Vector3f::UnitY()) * R;
+        R = Eigen::AngleAxisf(viewport_ryp[2] * M_PI / 180.0f, Eigen::Vector3f::UnitX()) * R;
+        R = Eigen::AngleAxisf(viewport_ryp[1] * M_PI / 180.0f, Eigen::Vector3f::UnitZ()) * R;
+
+        Eigen::Matrix4f world = Eigen::Matrix4f::Zero();
+        world.block<3, 3>(0, 0) = R.transpose();
+        world.block<3, 1>(0, 3) = -R.transpose() * viewport_xyz;
+        world(3, 3) = 1.0;
+
+        return world;
+    }
+
+    void load() {
+        static const gl::GLchar *grid_vshader = R"(
+            #version 150
+            uniform mat4 ProjMat;
+            uniform vec4 Color;
+            in vec3 Position;
+            out vec3 Frag_Position;
+            out vec4 Frag_Color;
+            void main() {
+                Frag_Position = Position;
+                Frag_Color = Color;
+                gl_Position = ProjMat * vec4(Position, 1);
+            }
+        )";
+
+        static const gl::GLchar *grid_fshader = R"(
+            #version 150
+            in vec3 Frag_Position;
+            in vec4 Frag_Color;
+            out vec4 Out_Color;
+            void main(){
+                vec3 r = 1.0 - smoothstep(9.5, 10.5, abs(Frag_Position));
+                vec4 c = vec4(Frag_Color.rgb, Frag_Color.a * min(min(r.x, r.y), r.z));
+                Out_Color = c;
+            }
+        )";
+
+        static const gl::GLchar *position_vshader = R"(
+            #version 150
+            uniform mat4 ProjMat;
+            uniform vec3 Location;
+            uniform float Scale;
+            in vec3 Position;
+            in vec4 Color;
+            out vec3 Frag_Position;
+            out vec4 Frag_Color;
+            void main() {
+                vec3 p = Scale * (Position - Location);
+                Frag_Position = p;
+                Frag_Color = Color;
+                gl_Position = ProjMat * vec4(p, 1);
+            }
+        )";
+
+        static const gl::GLchar *position_fshader = R"(
+            #version 150
+            in vec3 Frag_Position;
+            in vec4 Frag_Color;
+            out vec4 Out_Color;
+            void main(){
+                vec3 r = 1.0 - smoothstep(9.5, 10.5, abs(Frag_Position));
+                vec4 c = vec4(Frag_Color.rgb, Frag_Color.a * min(min(r.x, r.y), r.z));
+                Out_Color = c;
+            }
+        )";
+
+        grid_shader = std::make_unique<Shader>(grid_vshader, grid_fshader);
+        position_shader = std::make_unique<Shader>(position_vshader, position_fshader);
+    }
+
+    void unload() {
+        position_shader.reset();
+        grid_shader.reset();
+    }
+
+    void gen_grid_level(int level, std::vector<Eigen::Vector3f> &grid_lines) const {
+        const auto &scale = viewport.scale;
+        const auto &location = viewport.world_xyz;
+        double step = pow(10, -level);
+        double gap = step * scale;
+
+        float x0 = location.x() * scale;
+        float y0 = location.y() * scale;
+        float z0 = location.z() * scale;
+
+        int x_lo = (int)ceil((-10.5 + x0) / gap);
+        int x_hi = (int)floor((10.5 + x0) / gap);
+        int y_lo = (int)ceil((-10.5 + y0) / gap);
+        int y_hi = (int)floor((10.5 + y0) / gap);
+
+        grid_lines.clear();
+
+        for (int x = x_lo; x <= x_hi; ++x) {
+            grid_lines.emplace_back(x * gap - x0, -10.5, -z0);
+            grid_lines.emplace_back(x * gap - x0, 10.5, -z0);
+        }
+        for (int y = y_lo; y <= y_hi; ++y) {
+            grid_lines.emplace_back(-10.5, y * gap - y0, -z0);
+            grid_lines.emplace_back(10.5, y * gap - y0, -z0);
+        }
+    }
+
+    void draw_grid() {
+        static std::vector<Eigen::Vector3f> bounding_box_vertices{
+            {10, 10, 10},
+            {-10, 10, 10},
+            {-10, -10, 10},
+            {10, -10, 10},
+            {10, -10, -10},
+            {-10, -10, -10},
+            {-10, 10, -10},
+            {10, 10, -10}};
+        static std::vector<unsigned int> bounding_box_edges{
+            0, 1, 1, 2, 2, 3, 3, 4,
+            4, 5, 5, 6, 6, 7, 0, 7,
+            0, 3, 4, 7, 1, 6, 2, 5};
+
+        gl::glDisable(gl::GL_SCISSOR_TEST);
+        gl::glEnable(gl::GL_DEPTH_TEST);
+        gl::glEnable(gl::GL_BLEND);
+        gl::glBlendEquation(gl::GL_FUNC_ADD);
+        gl::glBlendFunc(gl::GL_SRC_ALPHA, gl::GL_ONE_MINUS_SRC_ALPHA);
+
+        grid_shader->bind();
+        grid_shader->set_uniform("ProjMat", Eigen::Matrix4f(projection_matrix() * view_matrix() * model_matrix()));
+
+        grid_shader->set_uniform("Color", Eigen::Vector4f{1.0, 1.0, 1.0, 0.25});
+        grid_shader->set_attribute("Position", bounding_box_vertices);
+        grid_shader->set_indices(bounding_box_edges);
+        grid_shader->draw_indexed(gl::GL_LINES, 0, 24);
+
+        double level = log10f(viewport.scale * 5);
+        static std::vector<Eigen::Vector3f> grid_lines;
+
+        gen_grid_level(floor(level) - 1, grid_lines);
+        grid_shader->set_uniform("Color", Eigen::Vector4f{1.0, 1.0, 1.0, 0.25});
+        grid_shader->set_attribute("Position", grid_lines);
+        grid_shader->draw(gl::GL_LINES, 0, grid_lines.size());
+
+        gen_grid_level(floor(level), grid_lines);
+        grid_shader->set_uniform("Color", Eigen::Vector4f{1.0, 1.0, 1.0, pow(level - floor(level), 0.9) * 0.25});
+        grid_shader->set_attribute("Position", grid_lines);
+        grid_shader->draw(gl::GL_LINES, 0, grid_lines.size());
+
+        // float z0 = viewport.world_xyz.z() * viewport.scale;
+        // grid_lines.clear();
+        // grid_lines.emplace_back(-10, -10, -z0);
+        // grid_lines.emplace_back(-10, 10, -z0);
+        // grid_lines.emplace_back(10, 10, -z0);
+        // grid_lines.emplace_back(10, -10, -z0);
+        // grid_shader->set_uniform("Color", Eigen::Vector4f{1.0, 1.0, 1.0, 0.125});
+        // grid_shader->set_attribute("Position", grid_lines);
+        // grid_shader->draw(gl::GL_LINE_LOOP, 0, grid_lines.size());
+
+        grid_shader->unbind();
+    }
+
+    void draw_positions() {
+        gl::glDisable(gl::GL_DEPTH_TEST);
+        position_shader->bind();
+        position_shader->set_uniform("ProjMat", Eigen::Matrix4f(projection_matrix() * view_matrix() * model_matrix()));
+        position_shader->set_uniform("Location", viewport.world_xyz);
+        position_shader->set_uniform("Scale", viewport.scale);
+        for (const auto &record : position_records) {
+            if (record.data->empty()) continue;
+            static std::vector<Eigen::Vector4f> colors;
+            colors.resize(record.data->size());
+            if (record.uniform_color) {
+                std::fill(colors.begin(), colors.end(), *record.color);
+            } else {
+                std::copy(record.color, record.color + record.data->size(), colors.begin());
+            }
+            position_shader->set_attribute("Position", *record.data);
+            position_shader->set_attribute("Color", colors);
+            if (record.is_trajectory) {
+                position_shader->draw(gl::GL_LINE_STRIP, 0, record.data->size());
+            } else {
+                position_shader->draw(gl::GL_POINTS, 0, record.data->size());
+            }
+        }
+        position_shader->unbind();
+    }
 
     static void error_callback(int error, const char *description) {
         fprintf(stderr, "GLFW Error: %s\n", description);
@@ -112,7 +334,10 @@ class LightVisDetail {
     }
 
     static void character_input_callback(GLFWwindow *win, unsigned int codepoint) {
-        active_windows().at(win)->detail->events.characters.push_back(codepoint);
+        auto &characters = active_windows().at(win)->detail->events.characters;
+        if (characters.size() < NK_INPUT_MAX) {
+            characters.push_back(codepoint);
+        }
     }
 
     static void clipboard_copy_callback(nk_handle usr, const char *text, int len) {
@@ -209,40 +434,68 @@ int LightVis::height() const {
     return detail->viewport.window_size.y();
 }
 
+const Eigen::Vector3f &LightVis::location() const {
+    return detail->viewport.world_xyz;
+}
+
+Eigen::Vector3f &LightVis::location() {
+    return detail->viewport.world_xyz;
+}
+
+const float &LightVis::scale() const {
+    return detail->viewport.scale;
+}
+
+float &LightVis::scale() {
+    return detail->viewport.scale;
+}
+
 Eigen::Matrix4f LightVis::projection_matrix(float f, float near, float far) {
-    Eigen::Matrix4f proj = Eigen::Matrix4f::Zero();
-    proj(0, 0) = 2 * (f * height()) / width();
-    proj(1, 1) = -2 * f;
-    proj(2, 2) = (far + near) / (far - near);
-    proj(2, 3) = 2 * far * near / (near - far);
-    proj(3, 2) = 1.0;
-    return proj;
+    return detail->projection_matrix(f, near, far);
 }
 
 Eigen::Matrix4f LightVis::view_matrix() {
-    Eigen::Matrix4f view = Eigen::Matrix4f::Zero();
-    view(0, 0) = 1.0;
-    view(2, 1) = 1.0;
-    view(1, 2) = -1.0;
-    view(3, 3) = 1.0;
-    return view;
+    return detail->view_matrix();
 }
 
 Eigen::Matrix4f LightVis::model_matrix() {
-    const Eigen::Vector3f &viewport_ryp = detail->viewport.ryp;
-    const Eigen::Vector3f &viewport_xyz = detail->viewport.xyz;
+    return detail->model_matrix();
+}
 
-    Eigen::Matrix3f R = Eigen::Matrix3f::Identity();
-    R = Eigen::AngleAxisf(viewport_ryp[0] * M_PI / 180.0f, Eigen::Vector3f::UnitY()) * R;
-    R = Eigen::AngleAxisf(viewport_ryp[2] * M_PI / 180.0f, Eigen::Vector3f::UnitX()) * R;
-    R = Eigen::AngleAxisf(viewport_ryp[1] * M_PI / 180.0f, Eigen::Vector3f::UnitZ()) * R;
+void LightVis::add_points(std::vector<Eigen::Vector3f> &points, Eigen::Vector4f &color) {
+    position_record_t record;
+    record.is_trajectory = false;
+    record.data = &points;
+    record.color = &color;
+    record.uniform_color = true;
+    detail->position_records.push_back(record);
+}
 
-    Eigen::Matrix4f world = Eigen::Matrix4f::Zero();
-    world.block<3, 3>(0, 0) = R.transpose();
-    world.block<3, 1>(0, 3) = -R.transpose() * viewport_xyz;
-    world(3, 3) = 1.0;
+void LightVis::add_points(std::vector<Eigen::Vector3f> &points, std::vector<Eigen::Vector4f> &colors) {
+    position_record_t record;
+    record.is_trajectory = false;
+    record.data = &points;
+    record.color = &colors[0];
+    record.uniform_color = false;
+    detail->position_records.push_back(record);
+}
 
-    return world;
+void LightVis::add_trajectory(std::vector<Eigen::Vector3f> &positions, Eigen::Vector4f &color) {
+    position_record_t record;
+    record.is_trajectory = true;
+    record.data = &positions;
+    record.color = &color;
+    record.uniform_color = true;
+    detail->position_records.push_back(record);
+}
+
+void LightVis::add_trajectory(std::vector<Eigen::Vector3f> &positions, std::vector<Eigen::Vector4f> &colors) {
+    position_record_t record;
+    record.is_trajectory = true;
+    record.data = &positions;
+    record.color = &colors[0];
+    record.uniform_color = false;
+    detail->position_records.push_back(record);
 }
 
 void LightVis::load() {
@@ -310,24 +563,38 @@ void LightVis::process_events() {
         nk_input_key(nuklear, NK_KEY_RIGHT, glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS);
     }
 
+    bool button_left = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
+    bool button_middle = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS);
+    bool button_right = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
     double x, y;
     glfwGetCursorPos(window, &x, &y);
     nk_input_motion(nuklear, (int)x, (int)y);
-    nk_input_button(nuklear, NK_BUTTON_LEFT, (int)x, (int)y, (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS));
-    nk_input_button(nuklear, NK_BUTTON_MIDDLE, (int)x, (int)y, (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS));
-    nk_input_button(nuklear, NK_BUTTON_RIGHT, (int)x, (int)y, (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS));
-
+    nk_input_button(nuklear, NK_BUTTON_LEFT, (int)x, (int)y, (int)button_left);
+    nk_input_button(nuklear, NK_BUTTON_MIDDLE, (int)x, (int)y, (int)button_middle);
+    nk_input_button(nuklear, NK_BUTTON_RIGHT, (int)x, (int)y, (int)button_right);
     nk_input_button(nuklear, NK_BUTTON_DOUBLE, events.double_click_position.x(), events.double_click_position.y(), events.double_click);
-    events.double_click = false;
-
     nk_input_scroll(nuklear, nk_vec2(events.scroll_offset.x(), events.scroll_offset.y()));
-    events.scroll_offset.setZero();
 
     nk_input_end(nuklear);
+
+    if (!nk_item_is_any_active(nuklear)) {
+        detail->viewport.scale = std::clamp(detail->viewport.scale * (1.0 + events.scroll_offset.y() / 600.0), 1.0e-4, 1.0e4);
+        // printf("%f\n", detail->viewport.scale);
+    }
+
+    events.double_click = false;
+    events.scroll_offset.setZero();
 }
 
 void LightVis::render_canvas() {
-    draw(detail->viewport.framebuffer_size.x(), detail->viewport.framebuffer_size.y());
+    int w = detail->viewport.framebuffer_size.x();
+    int h = detail->viewport.framebuffer_size.y();
+    gl::glViewport(0, 0, w, h);
+    gl::glClearColor(0.125, 0.125, 0.125, 1.0); // TODO
+    gl::glClear(gl::GL_COLOR_BUFFER_BIT | gl::GL_DEPTH_BUFFER_BIT);
+    gl::glPointSize(3);
+    detail->draw_grid();
+    detail->draw_positions();
 }
 
 void LightVis::render_gui() {
@@ -539,6 +806,7 @@ void LightVis::create_window() {
 
     glfwSetWindowRefreshCallback(detail->context.window, LightVisDetail::window_refresh_callback);
 
+    detail->load();
     load();
 }
 
@@ -546,6 +814,7 @@ void LightVis::destroy_window() {
     activate_context();
 
     unload();
+    detail->unload();
 
     glfwSetWindowRefreshCallback(detail->context.window, nullptr);
     glfwSetCharCallback(detail->context.window, nullptr);

@@ -20,15 +20,23 @@ class LightVis {
     void show();
     void hide();
 
-    void add_button(const std::string &panel, const std::string &name, const std::function<void()> &callback);
-    void add_repeat(const std::string &panel, const std::string &name, const std::function<bool()> &callback);
-
     int width() const;
     int height() const;
+
+    const Eigen::Vector3f &location() const;
+    Eigen::Vector3f &location();
+    const float &scale() const;
+    float &scale();
 
     Eigen::Matrix4f projection_matrix(float f = 1.0, float near = 1.0e-2, float far = 1.0e4);
     Eigen::Matrix4f view_matrix();
     Eigen::Matrix4f model_matrix();
+
+    void add_points(std::vector<Eigen::Vector3f> &points, Eigen::Vector4f &color);
+    void add_points(std::vector<Eigen::Vector3f> &points, std::vector<Eigen::Vector4f> &colors);
+
+    void add_trajectory(std::vector<Eigen::Vector3f> &positions, Eigen::Vector4f &color);
+    void add_trajectory(std::vector<Eigen::Vector3f> &positions, std::vector<Eigen::Vector4f> &colors);
 
   protected:
     virtual void load();
