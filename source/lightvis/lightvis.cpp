@@ -53,6 +53,9 @@ struct context_t {
 struct viewport_t {
     Eigen::Vector2i window_size;
     Eigen::Vector2i framebuffer_size;
+    Eigen::Vector3f ryp = {0, -45, -42};
+    Eigen::Vector3f xyz = {-8, -8, 8};
+    float scale = 1.0;
 };
 
 struct events_t {
@@ -196,6 +199,50 @@ void LightVis::hide() {
     if (detail->context.window) {
         destroy_window();
     }
+}
+
+int LightVis::width() const {
+    return detail->viewport.window_size.x();
+}
+
+int LightVis::height() const {
+    return detail->viewport.window_size.y();
+}
+
+Eigen::Matrix4f LightVis::projection_matrix(float f, float near, float far) {
+    Eigen::Matrix4f proj = Eigen::Matrix4f::Zero();
+    proj(0, 0) = 2 * (f * height()) / width();
+    proj(1, 1) = -2 * f;
+    proj(2, 2) = (far + near) / (far - near);
+    proj(2, 3) = 2 * far * near / (near - far);
+    proj(3, 2) = 1.0;
+    return proj;
+}
+
+Eigen::Matrix4f LightVis::view_matrix() {
+    Eigen::Matrix4f view = Eigen::Matrix4f::Zero();
+    view(0, 0) = 1.0;
+    view(2, 1) = 1.0;
+    view(1, 2) = -1.0;
+    view(3, 3) = 1.0;
+    return view;
+}
+
+Eigen::Matrix4f LightVis::model_matrix() {
+    const Eigen::Vector3f &viewport_ryp = detail->viewport.ryp;
+    const Eigen::Vector3f &viewport_xyz = detail->viewport.xyz;
+
+    Eigen::Matrix3f R = Eigen::Matrix3f::Identity();
+    R = Eigen::AngleAxisf(viewport_ryp[0] * M_PI / 180.0f, Eigen::Vector3f::UnitY()) * R;
+    R = Eigen::AngleAxisf(viewport_ryp[2] * M_PI / 180.0f, Eigen::Vector3f::UnitX()) * R;
+    R = Eigen::AngleAxisf(viewport_ryp[1] * M_PI / 180.0f, Eigen::Vector3f::UnitZ()) * R;
+
+    Eigen::Matrix4f world = Eigen::Matrix4f::Zero();
+    world.block<3, 3>(0, 0) = R.transpose();
+    world.block<3, 1>(0, 3) = -R.transpose() * viewport_xyz;
+    world(3, 3) = 1.0;
+
+    return world;
 }
 
 void LightVis::load() {

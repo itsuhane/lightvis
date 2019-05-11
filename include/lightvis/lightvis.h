@@ -4,6 +4,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <Eigen/Eigen>
 
 namespace lightvis {
 
@@ -21,6 +22,13 @@ class LightVis {
 
     void add_button(const std::string &panel, const std::string &name, const std::function<void()> &callback);
     void add_repeat(const std::string &panel, const std::string &name, const std::function<bool()> &callback);
+
+    int width() const;
+    int height() const;
+
+    Eigen::Matrix4f projection_matrix(float f = 1.0, float near = 1.0e-2, float far = 1.0e4);
+    Eigen::Matrix4f view_matrix();
+    Eigen::Matrix4f model_matrix();
 
   protected:
     virtual void load();
