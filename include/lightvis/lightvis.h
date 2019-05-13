@@ -10,6 +10,20 @@ namespace lightvis {
 
 class LightVisDetail;
 
+struct MouseStates {
+    bool mouse_left;
+    bool mouse_middle;
+    bool mouse_right;
+    bool mouse_double_click;
+    bool control_left;
+    bool control_right;
+    bool shift_left;
+    bool shift_right;
+    Eigen::Vector2f mouse_normal_position;
+    Eigen::Vector2f mouse_drag_position;
+    Eigen::Vector2f scroll;
+};
+
 class LightVis {
     friend class LightVisDetail;
 
@@ -42,6 +56,8 @@ class LightVis {
     virtual void load();
     virtual void unload();
     virtual void draw(int w, int h);
+    virtual bool mouse(const MouseStates &states);
+    //virtual bool keyboard()
     virtual void gui(void *ctx, int w, int h);
 
   private:

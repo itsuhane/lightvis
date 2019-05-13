@@ -54,8 +54,8 @@ struct context_t {
 struct viewport_t {
     Eigen::Vector2i window_size;
     Eigen::Vector2i framebuffer_size;
-    Eigen::Vector3f camera_ryp = {0, -45, -42};
-    Eigen::Vector3f camera_xyz = {-8, -8, 8};
+    Eigen::Vector3f viewport_ypr = {-45, -42, 0};
+    float viewport_distance = 15;
     Eigen::Vector3f world_xyz = {0, 0, 0};
     float scale = 1.0;
 };
@@ -91,6 +91,9 @@ class LightVisDetail {
     context_t context;
     viewport_t viewport;
     events_t events;
+
+    MouseStates mouse_states;
+
     std::vector<position_record_t> position_records;
 
     std::unique_ptr<Shader> grid_shader;
@@ -116,13 +119,19 @@ class LightVisDetail {
     }
 
     Eigen::Matrix4f model_matrix() const {
-        const Eigen::Vector3f &viewport_ryp = viewport.camera_ryp;
-        const Eigen::Vector3f &viewport_xyz = viewport.camera_xyz;
+        const Eigen::Vector3f &viewport_ypr = viewport.viewport_ypr;
 
         Eigen::Matrix3f R = Eigen::Matrix3f::Identity();
-        R = Eigen::AngleAxisf(viewport_ryp[0] * M_PI / 180.0f, Eigen::Vector3f::UnitY()) * R;
-        R = Eigen::AngleAxisf(viewport_ryp[2] * M_PI / 180.0f, Eigen::Vector3f::UnitX()) * R;
-        R = Eigen::AngleAxisf(viewport_ryp[1] * M_PI / 180.0f, Eigen::Vector3f::UnitZ()) * R;
+        R = Eigen::AngleAxisf(viewport_ypr[2] * M_PI / 180.0f, Eigen::Vector3f::UnitY()) * R; // r
+        R = Eigen::AngleAxisf(viewport_ypr[1] * M_PI / 180.0f, Eigen::Vector3f::UnitX()) * R; // p
+        R = Eigen::AngleAxisf(viewport_ypr[0] * M_PI / 180.0f, Eigen::Vector3f::UnitZ()) * R; // y
+
+        double cy = cos(-viewport_ypr[0] * M_PI / 180.0f);
+        double sy = sin(-viewport_ypr[0] * M_PI / 180.0f);
+        double cp = cos(-viewport_ypr[1] * M_PI / 180.0f);
+        double sp = sin(-viewport_ypr[1] * M_PI / 180.0f);
+        Eigen::Vector3f viewport_xyz = {-sy * cp, -cy * cp, sp};
+        viewport_xyz *= viewport.viewport_distance;
 
         Eigen::Matrix4f world = Eigen::Matrix4f::Zero();
         world.block<3, 3>(0, 0) = R.transpose();
@@ -265,16 +274,6 @@ class LightVisDetail {
         grid_shader->set_uniform("Color", Eigen::Vector4f{1.0, 1.0, 1.0, pow(level - floor(level), 0.9) * 0.25});
         grid_shader->set_attribute("Position", grid_lines);
         grid_shader->draw(gl::GL_LINES, 0, grid_lines.size());
-
-        // float z0 = viewport.world_xyz.z() * viewport.scale;
-        // grid_lines.clear();
-        // grid_lines.emplace_back(-10, -10, -z0);
-        // grid_lines.emplace_back(-10, 10, -z0);
-        // grid_lines.emplace_back(10, 10, -z0);
-        // grid_lines.emplace_back(10, -10, -z0);
-        // grid_shader->set_uniform("Color", Eigen::Vector4f{1.0, 1.0, 1.0, 0.125});
-        // grid_shader->set_attribute("Position", grid_lines);
-        // grid_shader->draw(gl::GL_LINE_LOOP, 0, grid_lines.size());
 
         grid_shader->unbind();
     }
@@ -507,6 +506,10 @@ void LightVis::unload() {
 void LightVis::draw(int w, int h) {
 }
 
+bool LightVis::mouse(const MouseStates &states) {
+    return false;
+}
+
 void LightVis::gui(void *ctx, int w, int h) {
 }
 
@@ -542,8 +545,12 @@ void LightVis::process_events() {
     nk_input_key(nuklear, NK_KEY_SCROLL_DOWN, glfwGetKey(window, GLFW_KEY_PAGE_DOWN) == GLFW_PRESS);
     nk_input_key(nuklear, NK_KEY_SCROLL_UP, glfwGetKey(window, GLFW_KEY_PAGE_UP) == GLFW_PRESS);
 
-    bool shift_down = (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS);
-    bool control_down = (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS);
+    bool shift_left = (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS);
+    bool shift_right = (glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS);
+    bool control_left = (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS);
+    bool control_right = (glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS);
+    bool shift_down = shift_left || shift_right;
+    bool control_down = control_left || control_right;
     nk_input_key(nuklear, NK_KEY_SHIFT, shift_down);
     nk_input_key(nuklear, NK_KEY_CTRL, control_down);
 
@@ -578,8 +585,30 @@ void LightVis::process_events() {
     nk_input_end(nuklear);
 
     if (!nk_item_is_any_active(nuklear)) {
-        detail->viewport.scale = std::clamp(detail->viewport.scale * (1.0 + events.scroll_offset.y() / 600.0), 1.0e-4, 1.0e4);
-        // printf("%f\n", detail->viewport.scale);
+        MouseStates &states = detail->mouse_states;
+        states.mouse_left = button_left;
+        states.mouse_middle = button_middle;
+        states.mouse_right = button_right;
+        states.mouse_double_click = events.double_click;
+        states.scroll = events.scroll_offset;
+        if (!(states.mouse_left || states.mouse_middle || states.mouse_right)) {
+            states.mouse_normal_position = {x, y};
+        }
+        states.mouse_drag_position = {x, y};
+        states.control_left = control_left;
+        states.control_right = control_right;
+        states.shift_left = shift_left;
+        states.shift_right = shift_right;
+        if (!mouse(states)) {
+            static Eigen::Vector3f last_ypr;
+            if (!(states.mouse_left || states.mouse_middle || states.mouse_right)) {
+                last_ypr = detail->viewport.viewport_ypr;
+            }
+            Eigen::Vector2f drag = states.mouse_drag_position - states.mouse_normal_position;
+            detail->viewport.viewport_ypr.x() = last_ypr.x() - drag.x() / 10;
+            detail->viewport.viewport_ypr.y() = last_ypr.y() - drag.y() / 10;
+            detail->viewport.scale = std::clamp(detail->viewport.scale * (1.0 + events.scroll_offset.y() / 600.0), 1.0e-4, 1.0e4);
+        }
     }
 
     events.double_click = false;
