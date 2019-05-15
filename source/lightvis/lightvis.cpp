@@ -71,8 +71,8 @@ struct events_t {
 struct position_record_t {
     bool is_trajectory;
     const std::vector<Eigen::Vector3f> *data;
-    bool uniform_color;
     const Eigen::Vector4f *color;
+    const std::vector<Eigen::Vector4f> *colors;
 };
 
 std::set<LightVis *> &awaiting_windows() {
@@ -288,10 +288,10 @@ class LightVisDetail {
             if (record.data->empty()) continue;
             static std::vector<Eigen::Vector4f> colors;
             colors.resize(record.data->size());
-            if (record.uniform_color) {
+            if (record.color) {
                 std::fill(colors.begin(), colors.end(), *record.color);
-            } else {
-                std::copy(record.color, record.color + record.data->size(), colors.begin());
+            } else if (record.colors) {
+                std::copy(record.colors->begin(), record.colors->end(), colors.begin());
             }
             position_shader->set_attribute("Position", *record.data);
             position_shader->set_attribute("Color", colors);
@@ -466,7 +466,7 @@ void LightVis::add_points(std::vector<Eigen::Vector3f> &points, Eigen::Vector4f 
     record.is_trajectory = false;
     record.data = &points;
     record.color = &color;
-    record.uniform_color = true;
+    record.colors = nullptr;
     detail->position_records.push_back(record);
 }
 
@@ -474,8 +474,8 @@ void LightVis::add_points(std::vector<Eigen::Vector3f> &points, std::vector<Eige
     position_record_t record;
     record.is_trajectory = false;
     record.data = &points;
-    record.color = &colors[0];
-    record.uniform_color = false;
+    record.color = nullptr;
+    record.colors = &colors;
     detail->position_records.push_back(record);
 }
 
@@ -484,7 +484,7 @@ void LightVis::add_trajectory(std::vector<Eigen::Vector3f> &positions, Eigen::Ve
     record.is_trajectory = true;
     record.data = &positions;
     record.color = &color;
-    record.uniform_color = true;
+    record.colors = nullptr;
     detail->position_records.push_back(record);
 }
 
@@ -492,8 +492,8 @@ void LightVis::add_trajectory(std::vector<Eigen::Vector3f> &positions, std::vect
     position_record_t record;
     record.is_trajectory = true;
     record.data = &positions;
-    record.color = &colors[0];
-    record.uniform_color = false;
+    record.color = nullptr;
+    record.colors = &colors;
     detail->position_records.push_back(record);
 }
 
