@@ -130,7 +130,7 @@ class LightVisDetail {
         double sy = sin(-viewport_ypr[0] * M_PI / 180.0f);
         double cp = cos(-viewport_ypr[1] * M_PI / 180.0f);
         double sp = sin(-viewport_ypr[1] * M_PI / 180.0f);
-        Eigen::Vector3f viewport_xyz = {-sy * cp, -cy * cp, sp};
+        Eigen::Vector3f viewport_xyz = {float(-sy * cp), float(-cy * cp), float(sp)};
         viewport_xyz *= viewport.viewport_distance;
 
         Eigen::Matrix4f world = Eigen::Matrix4f::Zero();
@@ -271,7 +271,7 @@ class LightVisDetail {
         grid_shader->draw(gl::GL_LINES, 0, grid_lines.size());
 
         gen_grid_level(floor(level), grid_lines);
-        grid_shader->set_uniform("Color", Eigen::Vector4f{1.0, 1.0, 1.0, pow(level - floor(level), 0.9) * 0.25});
+        grid_shader->set_uniform("Color", Eigen::Vector4f{1.0, 1.0, 1.0, float(pow(level - floor(level), 0.9) * 0.25)});
         grid_shader->set_attribute("Position", grid_lines);
         grid_shader->draw(gl::GL_LINES, 0, grid_lines.size());
 

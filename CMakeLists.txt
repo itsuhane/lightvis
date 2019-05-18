@@ -36,3 +36,10 @@ target_link_libraries(lightvis
     depends::glfw
     depends::nuklear
 )
+
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+target_compile_definitions(lightvis
+  PRIVATE
+    _USE_MATH_DEFINES
+)
+endif()

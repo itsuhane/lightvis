@@ -6,84 +6,84 @@
 
 namespace lightvis {
 
+template <typename E>
+inline gl::GLboolean is_type_integral() {
+    return gl::GL_FALSE;
+}
+
+template <>
+inline gl::GLboolean is_type_integral<gl::GLbyte>() {
+    return gl::GL_TRUE;
+}
+
+template <>
+inline gl::GLboolean is_type_integral<gl::GLshort>() {
+    return gl::GL_TRUE;
+}
+
+template <>
+inline gl::GLboolean is_type_integral<gl::GLint>() {
+    return gl::GL_TRUE;
+}
+
+template <>
+inline gl::GLboolean is_type_integral<gl::GLubyte>() {
+    return gl::GL_TRUE;
+}
+
+template <>
+inline gl::GLboolean is_type_integral<gl::GLushort>() {
+    return gl::GL_TRUE;
+}
+
+template <>
+inline gl::GLboolean is_type_integral<gl::GLuint>() {
+    return gl::GL_TRUE;
+}
+
+template <typename E>
+inline gl::GLenum get_type_enum() {
+    puts("Error getting type enum.");
+    exit(0);
+    return gl::GL_NONE;
+}
+
+template <>
+inline gl::GLenum get_type_enum<gl::GLbyte>() {
+    return gl::GL_BYTE;
+}
+
+template <>
+inline gl::GLenum get_type_enum<gl::GLshort>() {
+    return gl::GL_SHORT;
+}
+
+template <>
+inline gl::GLenum get_type_enum<gl::GLint>() {
+    return gl::GL_INT;
+}
+
+template <>
+inline gl::GLenum get_type_enum<gl::GLubyte>() {
+    return gl::GL_UNSIGNED_BYTE;
+}
+
+template <>
+inline gl::GLenum get_type_enum<gl::GLushort>() {
+    return gl::GL_UNSIGNED_SHORT;
+}
+
+template <>
+inline gl::GLenum get_type_enum<gl::GLuint>() {
+    return gl::GL_UNSIGNED_INT;
+}
+
+template <>
+inline gl::GLenum get_type_enum<gl::GLfloat>() {
+    return gl::GL_FLOAT;
+}
+
 class Shader {
-    template <typename E>
-    static gl::GLboolean is_type_integral() {
-        return gl::GL_FALSE;
-    }
-
-    template <>
-    gl::GLboolean is_type_integral<gl::GLbyte>() {
-        return gl::GL_TRUE;
-    }
-
-    template <>
-    gl::GLboolean is_type_integral<gl::GLshort>() {
-        return gl::GL_TRUE;
-    }
-
-    template <>
-    gl::GLboolean is_type_integral<gl::GLint>() {
-        return gl::GL_TRUE;
-    }
-
-    template <>
-    gl::GLboolean is_type_integral<gl::GLubyte>() {
-        return gl::GL_TRUE;
-    }
-
-    template <>
-    gl::GLboolean is_type_integral<gl::GLushort>() {
-        return gl::GL_TRUE;
-    }
-
-    template <>
-    gl::GLboolean is_type_integral<gl::GLuint>() {
-        return gl::GL_TRUE;
-    }
-
-    template <typename E>
-    static gl::GLenum get_type_enum() {
-        puts("Error getting type enum.");
-        exit(0);
-        return gl::GL_NONE;
-    }
-
-    template <>
-    gl::GLenum get_type_enum<gl::GLbyte>() {
-        return gl::GL_BYTE;
-    }
-
-    template <>
-    gl::GLenum get_type_enum<gl::GLshort>() {
-        return gl::GL_SHORT;
-    }
-
-    template <>
-    gl::GLenum get_type_enum<gl::GLint>() {
-        return gl::GL_INT;
-    }
-
-    template <>
-    gl::GLenum get_type_enum<gl::GLubyte>() {
-        return gl::GL_UNSIGNED_BYTE;
-    }
-
-    template <>
-    gl::GLenum get_type_enum<gl::GLushort>() {
-        return gl::GL_UNSIGNED_SHORT;
-    }
-
-    template <>
-    gl::GLenum get_type_enum<gl::GLuint>() {
-        return gl::GL_UNSIGNED_INT;
-    }
-
-    template <>
-    gl::GLenum get_type_enum<gl::GLfloat>() {
-        return gl::GL_FLOAT;
-    }
-
   public:
     Shader(const char *vshader_source, const char *fshader_source) {
         gl::GLint status;
