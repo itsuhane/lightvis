@@ -461,6 +461,10 @@ Eigen::Matrix4f LightVis::model_matrix() {
     return detail->model_matrix();
 }
 
+Shader *LightVis::shader() {
+    return detail->position_shader.get();
+}
+
 void LightVis::add_points(std::vector<Eigen::Vector3f> &points, Eigen::Vector4f &color) {
     position_record_t record;
     record.is_trajectory = false;
@@ -624,6 +628,7 @@ void LightVis::render_canvas() {
     gl::glPointSize(3);
     detail->draw_grid();
     detail->draw_positions();
+    draw(w, h);
 }
 
 void LightVis::render_gui() {
