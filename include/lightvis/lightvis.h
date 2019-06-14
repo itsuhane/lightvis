@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <Eigen/Eigen>
+#include <lightvis/image.h>
 #include <lightvis/shader.h>
 
 namespace lightvis {
@@ -54,6 +55,12 @@ class LightVis {
     void add_trajectory(std::vector<Eigen::Vector3f> &positions, Eigen::Vector4f &color);
     void add_trajectory(std::vector<Eigen::Vector3f> &positions, std::vector<Eigen::Vector4f> &colors);
 
+    void add_separator();
+    void add_label(const std::string &label);
+    void add_image(const Image *image);
+    void add_graph(const std::vector<double> &values);
+    void add_progress(const double &value);
+
   protected:
     virtual void load();
     virtual void unload();
@@ -63,13 +70,6 @@ class LightVis {
     virtual void gui(void *ctx, int w, int h);
 
   private:
-    void activate_context();
-    void process_events();
-    void render_canvas();
-    void render_gui();
-    void present();
-    void create_window();
-    void destroy_window();
     std::unique_ptr<LightVisDetail> detail;
 };
 

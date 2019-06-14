@@ -11,10 +11,13 @@ superbuild_depend(eigen)
 superbuild_depend(glfw)
 superbuild_depend(glbinding)
 superbuild_depend(nuklear)
+superbuild_extern(opencv)
 
 add_library(lightvis
-  ${CMAKE_CURRENT_SOURCE_DIR}/include/lightvis/shader.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/lightvis/image.h
   ${CMAKE_CURRENT_SOURCE_DIR}/include/lightvis/lightvis.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/lightvis/shader.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/source/lightvis/image.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/source/lightvis/lightvis.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/source/lightvis/lightvis_font_roboto.h
   ${CMAKE_CURRENT_SOURCE_DIR}/source/lightvis/lightvis_font_roboto.cpp
@@ -32,6 +35,7 @@ target_link_libraries(lightvis
   PUBLIC
     depends::eigen
     depends::glbinding
+    depends::opencv
   PRIVATE
     depends::glfw
     depends::nuklear
